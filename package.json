@@ -1,0 +1,12 @@
+{
+  "name": "ilearning-lookup",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tự động cào điểm i-Learning từ LMS và build dashboard tra cứu",
+  "scripts": {
+    "scrape": "node scripts/scrape.js"
+  },
+  "dependencies": {
+    "playwright": "^1.47.0"
+  }
+}

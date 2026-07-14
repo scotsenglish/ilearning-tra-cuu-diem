@@ -1,0 +1,52 @@
+name: Cập nhật điểm i-Learning tự động
+
+on:
+  schedule:
+    # Giờ UTC — tương ứng 6:00, 12:00, 18:00 giờ Việt Nam (UTC+7)
+    - cron: "0 23 * * *"   # 6:00 sáng VN
+    - cron: "0 5 * * *"    # 12:00 trưa VN
+    - cron: "0 11 * * *"   # 18:00 tối VN
+  workflow_dispatch: {}     # cho phép bấm chạy tay để test
+
+permissions:
+  contents: write
+
+jobs:
+  scrape-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Cài Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Cài Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cài dependency Node + Playwright browser
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Chạy scrape.js (đăng nhập LMS + lấy dữ liệu)
+        env:
+          LMS_LOGIN_ID: ${{ secrets.LMS_LOGIN_ID }}
+          LMS_LOGIN_PASSWORD: ${{ secrets.LMS_LOGIN_PASSWORD }}
+        run: node scripts/scrape.js
+
+      - name: Build dashboard (build.py)
+        run: python3 scripts/build.py
+
+      - name: Commit & push kết quả
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/raw_scores.json data/run_log.json index.html
+          git diff --quiet --cached || git commit -m "Auto update: $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push

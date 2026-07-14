@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>i-Learning — Tra cứu điểm học viên</title>
+<style>
+  :root{
+    --navy:#12213a; --navy-2:#1b2f4d; --accent:#2f8f7e; --accent-soft:#e4f3f0;
+    --ink:#1c2530; --muted:#6b7686; --line:#e3e7ee; --bg:#f5f7fa; --warn:#c7622a;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; font-family:"Segoe UI",Roboto,Arial,sans-serif; background:var(--bg); color:var(--ink); }
+  header{ background:var(--navy); color:#fff; padding:18px 28px; }
+  header h1{ margin:0; font-size:19px; font-weight:600; }
+  header .sub{ color:#9db4d4; font-size:12.5px; margin-top:4px; }
+  main{ max-width:1180px; margin:0 auto; padding:24px 28px 60px 28px; }
+
+  .filter-card{
+    background:#fff; border:1px solid var(--line); border-radius:10px;
+    padding:16px 20px; margin-bottom:20px; display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end;
+  }
+  .filter-group{ display:flex; flex-direction:column; gap:5px; min-width:170px; position:relative; }
+  .filter-group.grow{ min-width:220px; flex:1; }
+  .filter-group label{ font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; }
+  .filter-group select, .filter-group input{ padding:9px 10px; border:1px solid var(--line); border-radius:7px; font-size:13.5px; }
+  .filter-group select:focus, .filter-group input:focus{ outline:none; border-color:var(--accent); }
+  .filter-clear{ background:transparent; border:1px solid var(--line); border-radius:7px; padding:9px 14px; font-size:13px; color:var(--muted); cursor:pointer; height:38px; }
+  .filter-clear:hover{ border-color:var(--warn); color:var(--warn); }
+  .filter-divider{ width:1px; background:var(--line); align-self:stretch; margin:0 2px; }
+
+  .suggest{ position:absolute; top:calc(100% + 4px); left:0; right:0; background:#fff; border:1px solid var(--line);
+    border-radius:8px; box-shadow:0 8px 24px rgba(20,30,50,.12); z-index:10; max-height:280px; overflow-y:auto; display:none; }
+  .suggest.show{ display:block; }
+  .suggest-item{ padding:10px 14px; cursor:pointer; display:flex; justify-content:space-between; font-size:13.5px; }
+  .suggest-item:hover{ background:var(--accent-soft); }
+  .suggest-item small{ color:var(--muted); }
+
+  .info-card{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:20px 22px; margin-bottom:18px;
+    display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; }
+  .info-card h2{ margin:0 0 4px 0; font-size:20px; }
+  .info-card .meta{ color:var(--muted); font-size:13.5px; }
+  .kpi-row{ display:flex; gap:22px; }
+  .kpi{ text-align:right; }
+  .kpi .num{ font-size:22px; font-weight:700; color:var(--navy); }
+  .kpi.warn .num{ color:var(--warn); }
+  .kpi .label{ font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+
+  .panel{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:20px 22px; margin-bottom:18px; }
+  .panel-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .panel-head h3{ margin:0; font-size:15px; }
+
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  th{ text-align:left; padding:10px 12px; background:var(--bg); color:var(--muted); font-weight:600; font-size:12px;
+    text-transform:uppercase; letter-spacing:.3px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td{ padding:10px 12px; border-bottom:1px solid var(--line); }
+  tr.row-click{ cursor:pointer; }
+  tr.row-click:hover{ background:var(--accent-soft); }
+  .score{ font-weight:600; }
+  .score.low{ color:var(--warn); }
+  .score.empty{ color:#c3c9d3; font-weight:400; }
+  th.sortable{ cursor:pointer; user-select:none; }
+  th.sortable:hover{ color:var(--navy); }
+
+  .table-wrap{ max-height:560px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; }
+  .table-wrap thead th{ position:sticky; top:0; z-index:2; }
+  .lecture-num{ color:var(--muted); font-weight:600; white-space:nowrap; }
+
+  .hint{ text-align:center; color:var(--muted); font-size:13.5px; padding:40px 0; }
+  .footnote{ color:var(--muted); font-size:12px; margin-top:6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>i-Learning — Tra cứu điểm học viên</h1>
+  <div class="sub" id="lastUpdated">Đang tải dữ liệu…</div>
+</header>
+
+<main>
+  <div class="filter-card">
+    <div class="filter-group">
+      <label>Vùng</label>
+      <select id="fVung"><option value="">Tất cả</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Chi nhánh</label>
+      <select id="fChiNhanh"><option value="">Tất cả</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Chương trình</label>
+      <select id="fChuongTrinh"><option value="">Tất cả</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Syllabus</label>
+      <select id="fSyllabus"><option value="">Tất cả</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Lecture</label>
+      <select id="fLecture"><option value="">Tất cả các lecture</option></select>
+    </div>
+
+    <div class="filter-divider"></div>
+
+    <div class="filter-group grow">
+      <label>Tìm theo tên học viên</label>
+      <input type="text" id="fStudentName" placeholder="VD: Minh Trí" autocomplete="off">
+      <div class="suggest" id="suggestBox"></div>
+    </div>
+    <div class="filter-group grow">
+      <label>Tìm theo lớp</label>
+      <select id="fClassSelect"><option value="">-- Chọn lớp --</option></select>
+    </div>
+
+    <button class="filter-clear" id="clearFilters">Xóa bộ lọc</button>
+  </div>
+
+  <div id="resultArea">
+    <div class="hint">Nhập tên học viên hoặc chọn lớp để xem điểm chi tiết. Dùng các bộ lọc để thu hẹp phạm vi tìm kiếm.</div>
+  </div>
+</main>
+
+<script>
+/* ===================== Dữ liệu thật do build.py nhúng vào ===================== */
+/* Khóa: "<ID hoc vien>::<Ma lop>"  ->  { id, name, branch, region, program, syllabus, classCode, lectures:{ "1":{...}, "2":{...} } } */
+const students = __STUDENT_DATA__;
+
+const CORE_ACTIVITIES = ["i-Build","i-Read","i-Listen","i-Imagine","i-Create"];
+const LOW_SCORE_THRESHOLD = 65;
+
+/* ===================== Index phụ trợ ===================== */
+const classRoster = {};
+Object.entries(students).forEach(([key,s])=>{
+  (classRoster[s.classCode] ||= []).push(key);
+});
+
+function distinctFilterValues(){
+  const vung=new Set(), branch=new Set(), program=new Set(), syllabus=new Set();
+  Object.values(students).forEach(s=>{
+    if(s.region) vung.add(s.region);
+    if(s.branch) branch.add(s.branch);
+    if(s.program) program.add(s.program);
+    if(s.syllabus) syllabus.add(s.syllabus);
+  });
+  return { vung:[...vung].sort(), branch:[...branch].sort(), program:[...program].sort(), syllabus:[...syllabus].sort() };
+}
+
+function maxLectureNumber(){
+  let max = 0;
+  Object.values(students).forEach(s=>{
+    Object.keys(s.lectures||{}).forEach(n=>{ const v=Number(n); if(v>max) max=v; });
+  });
+  return max || 48;
+}
+
+/* Gộp danh sách cột hoạt động: 5 cột lõi trước, rồi thêm bất kỳ cột phát sinh
+   (VD "i-Create (2)", "i-Boost") xuất hiện trong dữ liệu đang xem, theo thứ tự gặp trước */
+function collectActivityColumns(lectureObjs){
+  const extra = [];
+  lectureObjs.forEach(obj=>{
+    Object.keys(obj||{}).forEach(k=>{
+      if(!CORE_ACTIVITIES.includes(k) && !extra.includes(k)) extra.push(k);
+    });
+  });
+  return [...CORE_ACTIVITIES, ...extra];
+}
+
+/* ===================== Bộ lọc ===================== */
+const filters = { vung:"", branch:"", program:"", syllabus:"", lecture:"" };
+let currentClassCode = null;
+
+function populateFilterOptions(){
+  const opts = distinctFilterValues();
+  fillSelect('fVung', opts.vung);
+  fillSelect('fChiNhanh', opts.branch);
+  fillSelect('fChuongTrinh', opts.program);
+  fillSelect('fSyllabus', opts.syllabus);
+
+  const fLecture = document.getElementById('fLecture');
+  const maxLec = maxLectureNumber();
+  let lectureOpts = '<option value="">Tất cả các lecture</option>';
+  for(let i=1;i<=maxLec;i++){
+    lectureOpts += `<option value="${i}">Lecture ${String(i).padStart(2,'0')}</option>`;
+  }
+  fLecture.innerHTML = lectureOpts;
+
+  refreshClassSelect();
+}
+function fillSelect(id, values){
+  const el = document.getElementById(id);
+  const current = el.value;
+  el.innerHTML = '<option value="">Tất cả</option>' + values.map(v=>`<option value="${v}">${v}</option>`).join('');
+  if(values.includes(current)) el.value = current;
+}
+
+function studentMatchesFilters(s){
+  if(filters.vung && s.region !== filters.vung) return false;
+  if(filters.branch && s.branch !== filters.branch) return false;
+  if(filters.program && s.program !== filters.program) return false;
+  if(filters.syllabus && s.syllabus !== filters.syllabus) return false;
+  return true;
+}
+
+function filteredClassCodes(){
+  const codes = new Set();
+  Object.values(students).forEach(s=>{ if(studentMatchesFilters(s)) codes.add(s.classCode); });
+  return [...codes].sort();
+}
+
+function refreshClassSelect(){
+  const select = document.getElementById('fClassSelect');
+  const prev = select.value;
+  const codes = filteredClassCodes();
+  select.innerHTML = '<option value="">-- Chọn lớp --</option>' + codes.map(c=>`<option value="${c}">${c}</option>`).join('');
+  select.value = codes.includes(prev) ? prev : "";
+}
+
+function onLocationFilterChange(){
+  refreshClassSelect();
+  if(currentClassCode && filteredClassCodes().includes(currentClassCode)){
+    renderClassRoster(currentClassCode);
+  }
+}
+
+document.getElementById('fVung').addEventListener('change', e=>{ filters.vung = e.target.value; onLocationFilterChange(); });
+document.getElementById('fChiNhanh').addEventListener('change', e=>{ filters.branch = e.target.value; onLocationFilterChange(); });
+document.getElementById('fChuongTrinh').addEventListener('change', e=>{ filters.program = e.target.value; onLocationFilterChange(); });
+document.getElementById('fSyllabus').addEventListener('change', e=>{ filters.syllabus = e.target.value; onLocationFilterChange(); });
+document.getElementById('fLecture').addEventListener('change', e=>{
+  filters.lecture = e.target.value;
+  if(currentClassCode) renderClassRoster(currentClassCode);
+});
+document.getElementById('clearFilters').addEventListener('click', ()=>{
+  filters.vung = filters.branch = filters.program = filters.syllabus = filters.lecture = "";
+  ['fVung','fChiNhanh','fChuongTrinh','fSyllabus','fLecture'].forEach(id=>document.getElementById(id).value = "");
+  document.getElementById('fClassSelect').value = "";
+  document.getElementById('fStudentName').value = "";
+  currentClassCode = null;
+  refreshClassSelect();
+  document.getElementById('resultArea').innerHTML = '<div class="hint">Nhập tên học viên hoặc chọn lớp để xem điểm chi tiết. Dùng các bộ lọc để thu hẹp phạm vi tìm kiếm.</div>';
+});
+
+/* ===================== Tìm theo lớp ===================== */
+document.getElementById('fClassSelect').addEventListener('change', e=>{
+  if(e.target.value) renderClassRoster(e.target.value);
+});
+
+/* ===================== Tìm theo tên học viên ===================== */
+const nameInput = document.getElementById('fStudentName');
+const suggestBox = document.getElementById('suggestBox');
+
+nameInput.addEventListener('input', ()=>{
+  const q = nameInput.value.trim().toLowerCase();
+  if(!q){ suggestBox.classList.remove('show'); return; }
+  const matches = Object.entries(students).filter(([key,s])=>{
+    return studentMatchesFilters(s) && s.name.toLowerCase().includes(q);
+  }).slice(0, 30);
+  if(matches.length){
+    suggestBox.innerHTML = matches.map(([key,s])=>`
+      <div class="suggest-item" data-key="${key}">
+        <span>${s.name}</span><small>${s.id} · ${s.branch} · ${s.classCode}</small>
+      </div>`).join('');
+    suggestBox.classList.add('show');
+    suggestBox.querySelectorAll('.suggest-item').forEach(item=>{
+      item.addEventListener('click', ()=>{
+        renderStudent(item.dataset.key);
+        suggestBox.classList.remove('show');
+        nameInput.value = students[item.dataset.key].name;
+      });
+    });
+  } else {
+    suggestBox.innerHTML = '<div class="suggest-item"><span>Không tìm thấy (trong phạm vi bộ lọc hiện tại)</span></div>';
+    suggestBox.classList.add('show');
+  }
+});
+
+/* ===================== Render: roster theo lớp (1 dòng = 1 học viên x 1 lecture) ===================== */
+let rosterSortKey = null, rosterSortDir = 1;
+
+function renderClassRoster(classCode){
+  currentClassCode = classCode;
+  document.getElementById('fClassSelect').value = classCode;
+  const keys = (classRoster[classCode] || []).filter(k=>studentMatchesFilters(students[k]));
+
+  let rows = [];
+  keys.forEach(key=>{
+    const s = students[key];
+    const lectureNos = filters.lecture
+      ? [Number(filters.lecture)]
+      : Object.keys(s.lectures).map(Number).sort((a,b)=>a-b);
+    lectureNos.forEach(n=>{
+      rows.push({ key, sid:s.id, name:s.name, lectureNo:n, comp: s.lectures[n] || {} });
+    });
+  });
+
+  drawRosterTable(classCode, rows);
+}
+
+function drawRosterTable(classCode, rows){
+  const columns = collectActivityColumns(rows.map(r=>r.comp));
+
+  const sorted = [...rows];
+  if(rosterSortKey){
+    sorted.sort((a,b)=>{
+      const va = rosterSortKey === 'name' ? a.name : (rosterSortKey === 'lectureNo' ? a.lectureNo : (a.comp[rosterSortKey] ?? null));
+      const vb = rosterSortKey === 'name' ? b.name : (rosterSortKey === 'lectureNo' ? b.lectureNo : (b.comp[rosterSortKey] ?? null));
+      if(typeof va === 'string') return va.localeCompare(vb) * rosterSortDir;
+      if(va === null || va === undefined) return 1;
+      if(vb === null || vb === undefined) return -1;
+      return (va - vb) * rosterSortDir;
+    });
+  } else {
+    sorted.sort((a,b)=> a.name.localeCompare(b.name) || a.lectureNo - b.lectureNo);
+  }
+
+  const lecLabel = filters.lecture ? `Lecture ${String(filters.lecture).padStart(2,'0')}` : 'Tất cả các lecture';
+  const belowThreshold = rows.filter(r=>{
+    const vals = columns.map(c=>r.comp[c]).filter(v=>v!==undefined && v!==null);
+    if(!vals.length) return false;
+    return (vals.reduce((s,v)=>s+v,0)/vals.length) < LOW_SCORE_THRESHOLD;
+  }).length;
+  const uniqueStudents = new Set(rows.map(r=>r.key)).size;
+
+  document.getElementById('resultArea').innerHTML = `
+    <div class="info-card">
+      <div>
+        <h2>Lớp ${classCode}</h2>
+        <div class="meta">${uniqueStudents} học viên · ${rows.length} dòng điểm · Đang xem: ${lecLabel}</div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi ${belowThreshold ? 'warn' : ''}">
+          <div class="num">${belowThreshold}</div>
+          <div class="label">Lượt dưới ${LOW_SCORE_THRESHOLD} điểm (TB các TP)</div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>Điểm chi tiết theo lecture — ${lecLabel}</h3></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="sortable" data-key="name">Học viên ⇅</th>
+              <th class="sortable" data-key="lectureNo">Lecture ⇅</th>
+              ${columns.map(c=>`<th class="sortable" data-key="${c}">${c} ⇅</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody id="rosterBody"></tbody>
+        </table>
+      </div>
+      ${rows.length===0 ? '<div class="hint">Chưa có điểm nào trong phạm vi đang xem.</div>' : ''}
+    </div>
+  `;
+
+  document.getElementById('rosterBody').innerHTML = sorted.map(r=>`
+    <tr class="row-click" data-key="${r.key}">
+      <td>${r.name}<br><small style="color:var(--muted)">${r.sid}</small></td>
+      <td class="lecture-num">Lecture ${String(r.lectureNo).padStart(2,'0')}</td>
+      ${columns.map(c=>{
+        const v = r.comp[c];
+        return (v===undefined || v===null) ? '<td class="score empty">—</td>' : `<td class="score ${v<LOW_SCORE_THRESHOLD?'low':''}">${v}</td>`;
+      }).join('')}
+    </tr>
+  `).join('');
+
+  document.querySelectorAll('#resultArea tr.row-click').forEach(row=>{
+    row.addEventListener('click', ()=> renderStudent(row.dataset.key));
+  });
+  document.querySelectorAll('#resultArea th.sortable').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const key = th.dataset.key;
+      rosterSortDir = (rosterSortKey === key) ? rosterSortDir * -1 : 1;
+      rosterSortKey = key;
+      drawRosterTable(classCode, rows);
+    });
+  });
+}
+
+/* ===================== Render: chi tiết học viên theo lecture ===================== */
+function renderStudent(key){
+  const s = students[key];
+  if(!s) return;
+  const lectureNos = Object.keys(s.lectures).map(Number).sort((a,b)=>a-b);
+  const columns = collectActivityColumns(lectureNos.map(n=>s.lectures[n]));
+
+  let sum=0, count=0;
+  lectureNos.forEach(n=>{
+    Object.values(s.lectures[n]).forEach(v=>{ sum+=v; count++; });
+  });
+  const avg = count ? sum/count : null;
+
+  document.getElementById('resultArea').innerHTML = `
+    <div class="info-card">
+      <div>
+        <h2>${s.name}</h2>
+        <div class="meta">${s.id} · ${s.branch} · ${s.region} · ${s.program} · ${s.syllabus} · Lớp ${s.classCode}</div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi">
+          <div class="num">${avg !== null ? avg.toFixed(1) : '—'}</div>
+          <div class="label">Điểm TB các hoạt động</div>
+        </div>
+        <div class="kpi">
+          <div class="num">${lectureNos.length}</div>
+          <div class="label">Lecture đã có điểm</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Điểm chi tiết theo từng lecture</h3></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="lecture-num">Lecture</th>
+              ${columns.map(c=>`<th>${c}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody id="lectureBody"></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('lectureBody').innerHTML = lectureNos.map(n=>{
+    const lec = s.lectures[n];
+    return `<tr><td class="lecture-num">Lecture ${String(n).padStart(2,'0')}</td>${columns.map(c=>{
+      const v = lec[c];
+      return (v===undefined) ? '<td class="score empty">—</td>' : `<td class="score ${v<LOW_SCORE_THRESHOLD?'low':''}">${v}</td>`;
+    }).join('')}</tr>`;
+  }).join('');
+}
+
+/* ===================== Khởi tạo ===================== */
+populateFilterOptions();
+document.getElementById('lastUpdated').textContent =
+  `${Object.keys(students).length.toLocaleString('vi-VN')} dòng học viên-lớp đã tải · Cập nhật lúc __BUILD_TIME__`;
+</script>
+
+</body>
+</html>
