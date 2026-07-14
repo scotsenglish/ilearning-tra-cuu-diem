@@ -3,6 +3,9 @@ name: Cập nhật điểm i-Learning tự động
 on:
   schedule:
     # Giờ UTC — tương ứng 6:00, 12:00, 18:00 giờ Việt Nam (UTC+7)
+    # 3 mốc này chỉ để BẮT ĐẦU 1 VÒNG QUÉT MỚI (lấy dữ liệu mới nhất).
+    # Nếu 1 vòng đang dang dở, workflow tự kích hoạt chạy tiếp ngay (xem bước
+    # cuối cùng), không cần chờ tới mốc giờ kế tiếp.
     - cron: "0 23 * * *"   # 6:00 sáng VN
     - cron: "0 5 * * *"    # 12:00 trưa VN
     - cron: "0 11 * * *"   # 18:00 tối VN
@@ -10,11 +13,19 @@ on:
 
 permissions:
   contents: write
+  actions: write   # cần để workflow có thể tự kích hoạt lại chính nó
+
+# Đảm bảo chỉ 1 lần chạy tại 1 thời điểm — nếu lịch 12h/18h trùng lúc đang tự
+# chạy tiếp 1 vòng dang dở, lần mới sẽ xếp hàng chờ thay vì chạy chồng lên,
+# tránh 2 tiến trình cùng ghi đè data/scrape_state.json.
+concurrency:
+  group: ilearning-scrape
+  cancel-in-progress: false
 
 jobs:
   scrape-and-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 85
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -55,6 +66,22 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/raw_scores.json data/run_log.json index.html
+          git add data/raw_scores.json data/run_log.json data/scrape_state.json index.html
           git diff --quiet --cached || git commit -m "Auto update: $(date -u +'%Y-%m-%d %H:%M UTC')"
           git push
+
+      - name: Tự kích hoạt chạy tiếp nếu vòng quét chưa xong
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f data/scrape_state.json ]; then
+            STATUS=$(python3 -c "import json; print(json.load(open('data/scrape_state.json')).get('status',''))")
+            if [ "$STATUS" = "in_progress" ]; then
+              echo "Vòng quét chưa xong (status=in_progress) -> tự kích hoạt chạy tiếp ngay, không chờ lịch."
+              gh workflow run daily-update.yml --ref main
+            else
+              echo "Vòng quét đã xong (status=$STATUS) -> không cần chạy tiếp, chờ tới mốc giờ kế tiếp."
+            fi
+          else
+            echo "Chưa có data/scrape_state.json -> bỏ qua."
+          fi
