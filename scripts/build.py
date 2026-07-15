@@ -57,8 +57,10 @@ def build_student_dict(raw_rows, branch_region_map):
             region = "Chưa xác định"
             missing_region_branches.add(branch)
 
-        # Chuẩn hóa lectures: key JSON là string "1","2"... -> ép về int khi build,
-        # giữ nguyên tên hoạt động (kể cả "i-Create (2)", "i-Boost" nếu có)
+        # Chuẩn hóa lectures: key JSON là string "1","2"... -> ép về int khi build.
+        # Mỗi lecture giờ tách riêng "lesson" (tên bài học, dạng text) và "scores"
+        # (điểm từng thành phần, dạng số) — vì scrape.js lưu tên bài học chung
+        # trong key đặc biệt "_lessonName" lẫn cùng chỗ với điểm số.
         lectures_raw = row.get("lectures", {}) or {}
         lectures = {}
         for lec_no_str, activities in lectures_raw.items():
@@ -66,16 +68,20 @@ def build_student_dict(raw_rows, branch_region_map):
                 lec_no = int(lec_no_str)
             except (TypeError, ValueError):
                 continue
+            activities = activities or {}
+            lesson_name = activities.get("_lessonName", "")
             clean_activities = {}
-            for act_name, score in (activities or {}).items():
+            for act_name, score in activities.items():
+                if act_name == "_lessonName":
+                    continue
                 if score == "" or score is None:
                     continue
                 try:
                     clean_activities[act_name] = float(score)
                 except (TypeError, ValueError):
                     continue
-            if clean_activities:
-                lectures[lec_no] = clean_activities
+            if clean_activities or lesson_name:
+                lectures[lec_no] = {"lesson": lesson_name, "scores": clean_activities}
 
         students[key] = {
             "id": sid_raw,

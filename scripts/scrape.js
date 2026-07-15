@@ -414,7 +414,7 @@ async function main() {
         const CONCURRENCY = 3;
         const REQUEST_DELAY_MS = 150;
         const CHECKPOINT_EVERY = 50;
-        const activityOrder = ["i-Build", "i-Read", "i-Listen", "i-Imagine", "i-Create"];
+        const activityOrder = ["i-Build", "i-Read", "i-Listen", "i-Imagine", "i-Create", "i-Boost"];
         const sleep = ms => new Promise(r => setTimeout(r, ms));
 
       async function post(endpoint, body, attempt = 1) {
@@ -451,11 +451,23 @@ async function main() {
         }
       }
 
-      const getActivity = raw => {
+      // Chuỗi gốc từ LMS có 2 dạng:
+      //   "i-Build(Book 1 > Looking for Fun)"                          -> hoạt động đơn giản
+      //   "i-Create(Dialogue Speaking)(Book 1 > Looking for Fun)"      -> i-Create có phân loại phụ
+      // Cặp ngoặc cuối cùng luôn là tên bài học; nếu còn 1 cặp ngoặc phía trước
+      // nữa (chỉ xảy ra với i-Create) thì đó là phân loại phụ (Dialogue Speaking/Sentence Writing...).
+      const parseExamName = raw => {
         const s = String(raw ?? "").trim();
-        const lower = s.toLowerCase();
-        if (lower.startsWith("i-create")) return "i-Create";
-        return activityOrder.find(a => lower.startsWith(a.toLowerCase())) || s.split("(")[0] || "Unknown";
+        const groups = [...s.matchAll(/\(([^()]*)\)/g)].map(m => m[1].trim());
+        const prefix = s.split("(")[0].trim();
+        const lower = prefix.toLowerCase();
+        const baseActivity = activityOrder.find(a => lower.startsWith(a.toLowerCase())) || prefix || "Unknown";
+
+        if (baseActivity.toLowerCase() === "i-create" && groups.length >= 2) {
+          // groups[0] = phân loại phụ (VD "Dialogue Speaking"), groups cuối = tên bài học
+          return { activity: `i-Create (${groups[0]})`, lesson: groups[groups.length - 1] };
+        }
+        return { activity: baseActivity, lesson: groups[groups.length - 1] || "" };
       };
       const rawScore = v => (v === null || v === undefined || v === "" ? "" : v);
 
@@ -493,7 +505,7 @@ async function main() {
 
             for (const r of rows) {
               const lectureNo = Number(r.ssect_order) || lecture.order;
-              const activity = getActivity(r.ssexam_name);
+              const { activity, lesson } = parseExamName(r.ssexam_name);
               const studentId = r.cstd_id ?? r.cstd_id1 ?? r.std_id ?? "";
               const studentName = r.std_name ?? "";
               const className = r.cls_name || item.Class;
@@ -511,7 +523,7 @@ async function main() {
               }
               const student = students.get(key);
               if (!student.lectures[lectureNo]) student.lectures[lectureNo] = {};
-              // Nếu 1 lecture có nhiều dòng cùng activity (VD i-Create + i-Create (2)),
+              // Nếu 1 lecture có nhiều dòng cùng activity (hiếm, trùng lặp dữ liệu),
               // giữ dòng đầu tiên vào đúng tên, dòng sau đánh số thêm.
               let actKey = activity;
               let suffix = 2;
@@ -519,6 +531,10 @@ async function main() {
                 actKey = `${activity} (${suffix++})`;
               }
               student.lectures[lectureNo][actKey] = rawScore(r.score);
+              // Tên bài học giống nhau cho mọi hoạt động trong cùng 1 lecture -> lưu 1 lần
+              if (lesson && !student.lectures[lectureNo]._lessonName) {
+                student.lectures[lectureNo]._lessonName = lesson;
+              }
             }
 
             await sleep(REQUEST_DELAY_MS);

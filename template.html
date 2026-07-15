@@ -124,7 +124,7 @@
 /* Khóa: "<ID hoc vien>::<Ma lop>"  ->  { id, name, branch, region, program, syllabus, classCode, lectures:{ "1":{...}, "2":{...} } } */
 const students = __STUDENT_DATA__;
 
-const CORE_ACTIVITIES = ["i-Build","i-Read","i-Listen","i-Imagine","i-Create"];
+const BASE_ACTIVITIES = ["i-Build","i-Read","i-Listen","i-Imagine"];
 const LOW_SCORE_THRESHOLD = 65;
 
 /* ===================== Index phụ trợ ===================== */
@@ -152,16 +152,20 @@ function maxLectureNumber(){
   return max || 48;
 }
 
-/* Gộp danh sách cột hoạt động: 5 cột lõi trước, rồi thêm bất kỳ cột phát sinh
-   (VD "i-Create (2)", "i-Boost") xuất hiện trong dữ liệu đang xem, theo thứ tự gặp trước */
+/* Gộp danh sách cột hoạt động theo đúng thứ tự: i-Build, i-Read, i-Listen,
+   i-Imagine (luôn hiện) -> các biến thể i-Create (VD "i-Create (Dialogue
+   Speaking)", "i-Create (Sentence Writing)", sắp theo abc) -> i-Boost (nếu có)
+   -> bất kỳ hoạt động lạ nào khác chưa biết trước */
 function collectActivityColumns(lectureObjs){
-  const extra = [];
+  const seen = new Set();
   lectureObjs.forEach(obj=>{
-    Object.keys(obj||{}).forEach(k=>{
-      if(!CORE_ACTIVITIES.includes(k) && !extra.includes(k)) extra.push(k);
-    });
+    Object.keys(obj||{}).forEach(k=>seen.add(k));
   });
-  return [...CORE_ACTIVITIES, ...extra];
+  const createVariants = [...seen].filter(k=>k.toLowerCase().startsWith('i-create')).sort();
+  const hasBoost = seen.has('i-Boost');
+  const accounted = new Set([...BASE_ACTIVITIES, ...createVariants, 'i-Boost']);
+  const others = [...seen].filter(k=>!accounted.has(k)).sort();
+  return [...BASE_ACTIVITIES, ...createVariants, ...(hasBoost ? ['i-Boost'] : []), ...others];
 }
 
 /* ===================== Bộ lọc ===================== */
@@ -288,7 +292,8 @@ function renderClassRoster(classCode){
       ? [Number(filters.lecture)]
       : Object.keys(s.lectures).map(Number).sort((a,b)=>a-b);
     lectureNos.forEach(n=>{
-      rows.push({ key, sid:s.id, name:s.name, lectureNo:n, comp: s.lectures[n] || {} });
+      const lec = s.lectures[n] || {};
+      rows.push({ key, sid:s.id, name:s.name, lectureNo:n, lesson: lec.lesson || '', comp: lec.scores || {} });
     });
   });
 
@@ -354,7 +359,7 @@ function drawRosterTable(classCode, rows){
   document.getElementById('rosterBody').innerHTML = sorted.map(r=>`
     <tr class="row-click" data-key="${r.key}">
       <td>${r.name}<br><small style="color:var(--muted)">${r.sid}</small></td>
-      <td class="lecture-num">Lecture ${String(r.lectureNo).padStart(2,'0')}</td>
+      <td class="lecture-num">Lecture ${String(r.lectureNo).padStart(2,'0')}${r.lesson ? `<br><small style="color:var(--muted); font-weight:400;">${r.lesson}</small>` : ''}</td>
       ${columns.map(c=>{
         const v = r.comp[c];
         return (v===undefined || v===null) ? '<td class="score empty">—</td>' : `<td class="score ${v<LOW_SCORE_THRESHOLD?'low':''}">${v}</td>`;
@@ -380,11 +385,11 @@ function renderStudent(key){
   const s = students[key];
   if(!s) return;
   const lectureNos = Object.keys(s.lectures).map(Number).sort((a,b)=>a-b);
-  const columns = collectActivityColumns(lectureNos.map(n=>s.lectures[n]));
+  const columns = collectActivityColumns(lectureNos.map(n=>(s.lectures[n]||{}).scores || {}));
 
   let sum=0, count=0;
   lectureNos.forEach(n=>{
-    Object.values(s.lectures[n]).forEach(v=>{ sum+=v; count++; });
+    Object.values((s.lectures[n]||{}).scores || {}).forEach(v=>{ sum+=v; count++; });
   });
   const avg = count ? sum/count : null;
 
@@ -413,6 +418,7 @@ function renderStudent(key){
           <thead>
             <tr>
               <th class="lecture-num">Lecture</th>
+              <th>Bài học</th>
               ${columns.map(c=>`<th>${c}</th>`).join('')}
             </tr>
           </thead>
@@ -423,9 +429,10 @@ function renderStudent(key){
   `;
 
   document.getElementById('lectureBody').innerHTML = lectureNos.map(n=>{
-    const lec = s.lectures[n];
-    return `<tr><td class="lecture-num">Lecture ${String(n).padStart(2,'0')}</td>${columns.map(c=>{
-      const v = lec[c];
+    const lec = s.lectures[n] || {};
+    const scores = lec.scores || {};
+    return `<tr><td class="lecture-num">Lecture ${String(n).padStart(2,'0')}</td><td>${lec.lesson || '—'}</td>${columns.map(c=>{
+      const v = scores[c];
       return (v===undefined) ? '<td class="score empty">—</td>' : `<td class="score ${v<LOW_SCORE_THRESHOLD?'low':''}">${v}</td>`;
     }).join('')}</tr>`;
   }).join('');
