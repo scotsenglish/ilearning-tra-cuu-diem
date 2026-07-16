@@ -510,7 +510,12 @@ async function main() {
 
             for (const r of rows) {
               const lectureNo = Number(r.ssect_order) || lecture.order;
-              const { activity, lesson } = parseExamName(r.ssexam_name);
+              // esdtl_type mới là field có ĐẦY ĐỦ cả phân loại lẫn tên bài học
+              // (VD "i-Create(Dialogue Speaking)(Book 1 > Ant and Cat Box)").
+              // ssexam_name chỉ có phần phân loại, KHÔNG có tên bài học -> đây là
+              // lý do tên bài học bị thiếu ở bản trước, giữ ssexam_name làm fallback
+              // phòng trường hợp esdtl_type thiếu.
+              const { activity, lesson } = parseExamName(r.esdtl_type || r.ssexam_name);
               const studentId = r.cstd_id ?? r.cstd_id1 ?? r.std_id ?? "";
               const studentName = r.std_name ?? "";
               const className = r.cls_name || item.Class;
