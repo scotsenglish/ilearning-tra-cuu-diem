@@ -9,6 +9,8 @@ giờ VN) qua GitHub Actions, không cần ai thao tác thủ công.
 ```
 scripts/scrape.js     - đăng nhập LMS, build Class ID Cache, export điểm raw
 scripts/build.py       - chuyển raw_scores.json -> index.html (nhúng dữ liệu)
+scripts/backup-drive.js - gửi điểm raw lên Apps Script để backup .xlsx vào Google Drive
+apps-script/Code.gs    - Apps Script nhận dữ liệu từ backup-drive.js, xuất .xlsx lưu vào Drive
 template.html          - khung giao diện dashboard (build.py nhúng data vào đây)
 data/branch_region_map.json  - bảng map Chi nhánh -> Vùng (BẠN CẦN ĐIỀN ĐỦ)
 .github/workflows/daily-update.yml  - lịch chạy tự động
@@ -77,6 +79,39 @@ Vào tab **Actions** trên GitHub → chọn workflow **"Cập nhật điểm i-
   ngày càng nặng vì toàn bộ dữ liệu được nhúng thẳng vào 1 file tĩnh. Nếu thấy
   dashboard tải chậm, có thể cần tách dữ liệu ra file JSON riêng và fetch bằng
   JavaScript thay vì nhúng trực tiếp — báo lại nếu tới lúc đó cần hỗ trợ.
+
+## Backup .xlsx tự động lên Google Drive (tuỳ chọn)
+
+Mỗi lần workflow chạy xong (3 lần/ngày), có thể tự động xuất toàn bộ điểm thô
+(đầy đủ từng buổi/Lecture) thành 1 file `.xlsx` lưu vào 1 thư mục Drive riêng
+tên **"iLearning Backups"** (tự tạo nếu chưa có) — cùng cơ chế đã làm cho
+dashboard c-Learning. Tính năng này optional: nếu chưa cấu hình secrets bên
+dưới, bước backup tự bỏ qua, không ảnh hưởng gì tới phần cập nhật dashboard.
+
+### Thiết lập
+
+1. Mở file [`apps-script/Code.gs`](apps-script/Code.gs), làm theo đúng hướng
+   dẫn ở phần comment đầu file (tạo Apps Script project mới, paste code vào,
+   set Script Property `WRITE_TOKEN`, Deploy dạng Web app).
+2. Thêm 2 secret vào repo GitHub (**Settings → Secrets and variables →
+   Actions**):
+
+   | Tên secret                    | Giá trị                                        |
+   |--------------------------------|-------------------------------------------------|
+   | `ILEARNING_APPS_SCRIPT_URL`    | URL Web app sau khi Deploy (bước 1)             |
+   | `ILEARNING_APPS_SCRIPT_TOKEN`  | Đúng giá trị đã đặt cho `WRITE_TOKEN` (bước 1)  |
+
+3. Chạy tay workflow (**Actions → Run workflow**) để kiểm tra bước "Backup
+   .xlsx lên Google Drive" chạy thành công, rồi vào Drive kiểm tra folder
+   "iLearning Backups" đã có file `iLearning_Backup_<ngày>_<giờ>.xlsx`.
+
+### Xem lại 1 bản backup cũ trên dashboard
+
+Trên tab **"Tra cứu chi tiết"** của dashboard có nút **"📂 Tải file backup
+(.xlsx) để xem lại"** — chọn 1 file backup đã tải từ Drive về, dashboard sẽ
+đọc và hiển thị lại đúng dữ liệu trong file đó. Đây CHỈ đổi dữ liệu đang xem
+trong phiên trình duyệt hiện tại (không ghi gì lên GitHub/Drive) — tải lại
+trang sẽ quay về dữ liệu tự động mới nhất.
 
 ## Giới hạn hiện tại (biết trước, có thể mở rộng sau)
 

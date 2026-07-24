@@ -59,6 +59,13 @@ jobs:
       - name: Build dashboard (build.py)
         run: python3 scripts/build.py
 
+      - name: Backup .xlsx lên Google Drive (không làm hỏng workflow nếu lỗi)
+        env:
+          ILEARNING_APPS_SCRIPT_URL: ${{ secrets.ILEARNING_APPS_SCRIPT_URL }}
+          ILEARNING_APPS_SCRIPT_TOKEN: ${{ secrets.ILEARNING_APPS_SCRIPT_TOKEN }}
+        run: node scripts/backup-drive.js
+        continue-on-error: true
+
       - name: Commit và push kết quả
         run: |
           git config user.name "github-actions[bot]"

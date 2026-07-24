@@ -80,6 +80,13 @@
   .filter-clear:hover{ background:#fbe4d5; color:var(--warn); }
   .filter-divider{ width:1px; background:var(--line); align-self:stretch; margin:0 4px; }
 
+  .backup-upload-link{
+    font-size:12px; color:var(--muted-2); cursor:pointer; white-space:nowrap;
+    margin-left:10px; padding-bottom:1px; border-bottom:1px dashed transparent;
+    transition:color .15s, border-color .15s;
+  }
+  .backup-upload-link:hover{ color:var(--blue); border-bottom-color:var(--blue-dim); }
+
   .suggest{
     position:absolute; top:calc(100% + 6px); left:0; right:0; background:var(--surface);
     border:1px solid var(--line-soft); border-radius:14px; box-shadow:0 20px 45px -15px rgba(0,0,0,.18);
@@ -287,7 +294,11 @@
 <!-- ============ TRANG: THỐNG KÊ (dữ liệu tự động, thay cho upload file) ============ -->
 <div id="page-stats">
   <div class="filters-row">
-    <div class="data-info-inline" id="data-info">Đang tải dữ liệu…</div>
+    <div class="data-info-inline">
+      <span id="data-info">Đang tải dữ liệu…</span>
+      <label class="backup-upload-link" for="backup-upload" id="upload-status" title="Tải file backup .xlsx (xuất từ Google Drive) để xem lại — chỉ áp dụng cho tab Tra cứu chi tiết, trong phiên xem hiện tại">📂 Tải file backup</label>
+      <input type="file" id="backup-upload" accept=".xlsx" style="display:none;">
+    </div>
     <div class="filter-group"><label>Vùng</label><div class="multiselect" id="ms-region"></div></div>
     <div class="filter-group"><label>Chi nhánh</label><div class="multiselect" id="ms-branch"></div></div>
     <div class="filter-group"><label>Program</label><div class="multiselect" id="ms-program"></div></div>
@@ -1262,6 +1273,105 @@ function renderStudent(key){
     }).join('')}</tr>`;
   }).join('');
 }
+
+/* ===================== Tải file backup .xlsx (chỉ áp dụng phiên xem hiện tại) =====================
+   Đọc lại đúng định dạng bảng do apps-script/Code.gs xuất ra (cùng cột với
+   scripts/backup-drive.js tạo): Vùng, Chi nhánh, Program, Syllabus, Lớp, Mã học
+   viên, Tên học viên, rồi "Buổi N - Bài học" / "Buổi N - Điểm" lặp lại cho mỗi
+   buổi. Việc này CHỈ thay dữ liệu trong bộ nhớ trình duyệt (biến `students`),
+   không ghi gì lên GitHub/Drive — tải lại trang sẽ quay về dữ liệu tự động mới
+   nhất do build.py nhúng sẵn. */
+function parseActivityString(str){
+  const scores = {};
+  String(str || '').split('|').map(s=>s.trim()).filter(Boolean).forEach(part=>{
+    const eq = part.indexOf('=');
+    if (eq === -1) return;
+    const key = part.slice(0, eq).trim();
+    const val = part.slice(eq + 1).trim();
+    if (!key) return;
+    const num = parseFloat(val);
+    if (!Number.isNaN(num)) scores[key] = num;
+  });
+  return scores;
+}
+
+function studentsFromBackupRows(headerRow, dataRows){
+  const idx = {};
+  headerRow.forEach((h, i) => { idx[h] = i; });
+  const lectureCols = [];
+  headerRow.forEach((h, i) => {
+    const m = /^Buổi (\d+) - Bài học$/.exec(h);
+    if (m) lectureCols.push({ n: parseInt(m[1], 10), lessonIdx: i, scoreIdx: idx[`Buổi ${m[1]} - Điểm`] });
+  });
+
+  const out = {};
+  dataRows.forEach(row => {
+    const id = String(row[idx['Mã học viên']] ?? '').trim();
+    const classCode = String(row[idx['Lớp']] ?? '').trim();
+    if (!id || !classCode) return;
+    const key = `${id}::${classCode}`;
+    const lectures = {};
+    lectureCols.forEach(({ n, lessonIdx, scoreIdx }) => {
+      const lesson = row[lessonIdx] || '';
+      const scores = parseActivityString(row[scoreIdx]);
+      if (lesson || Object.keys(scores).length) lectures[n] = { lesson, scores };
+    });
+    out[key] = {
+      id, name: row[idx['Tên học viên']] || '',
+      branch: row[idx['Chi nhánh']] || '', region: row[idx['Vùng']] || '',
+      program: row[idx['Program']] || '', syllabus: row[idx['Syllabus']] || '',
+      classCode, lectures,
+    };
+  });
+  return out;
+}
+
+function rebuildAfterDataSwap(statusLabel){
+  Object.keys(classRoster).forEach(k => delete classRoster[k]);
+  Object.entries(students).forEach(([key, s]) => {
+    (classRoster[s.classCode] ||= []).push(key);
+  });
+  filters.vung = filters.branch = filters.program = filters.syllabus = filters.lecture = "";
+  ['fVung','fChiNhanh','fChuongTrinh','fSyllabus','fLecture'].forEach(id => document.getElementById(id).value = "");
+  document.getElementById('fClassSelect').value = "";
+  document.getElementById('fStudentName').value = "";
+  document.getElementById('fClassCodeInput').value = "";
+  currentClassCode = null;
+  populateFilterOptions();
+  document.getElementById('resultArea').innerHTML = '<div class="hint">Nhập tên học viên, chọn lớp, hoặc gõ thẳng mã lớp để xem điểm chi tiết.</div>';
+  document.getElementById('lastUpdated').textContent =
+    `${Object.keys(students).length.toLocaleString('vi-VN')} dòng học viên-lớp · ${statusLabel}`;
+}
+
+document.getElementById('backup-upload').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const status = document.getElementById('upload-status');
+  status.textContent = `⏳ Đang đọc "${file.name}"...`;
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    try {
+      const wb = XLSX.read(evt.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (!rows.length) throw new Error('File rỗng.');
+      const [headerRow, ...dataRows] = rows;
+      const newStudents = studentsFromBackupRows(headerRow, dataRows);
+      if (!Object.keys(newStudents).length){
+        throw new Error('Không đọc được dòng học viên nào — kiểm tra đúng file backup .xlsx (cần có cột "Mã học viên" và "Lớp").');
+      }
+      Object.keys(students).forEach(k => delete students[k]);
+      Object.assign(students, newStudents);
+      rebuildAfterDataSwap(`đang xem file backup "${file.name}"`);
+      status.textContent = `✓ Đang xem "${file.name}" (tab Tra cứu chi tiết) — tải lại trang để về mới nhất`;
+    } catch (err) {
+      status.textContent = `⚠ Lỗi đọc file: ${err.message}`;
+    } finally {
+      e.target.value = '';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
 
 /* ===================== Khởi tạo ===================== */
 populateFilterOptions();
